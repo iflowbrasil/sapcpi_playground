@@ -1,0 +1,45 @@
+# 1. Nome que aparecerá na aba "Actions" do GitHub
+name: SAP CPI Backup Workflow
+
+# 2. Gatilhos (Triggers)
+on:
+  workflow_dispatch: # Permite execução manual
+  schedule:
+    - cron: '0 0 * * 1' # Executa automaticamente toda segunda-feira à meia-noite
+
+jobs:
+  backup_job:
+    runs-on: ubuntu-latest # Máquina virtual Linux temporária
+    
+    steps:
+      # PASSO 1: Baixa o código do repositório para a VM
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # PASSO 2: Autenticação Oauth2 no BTP
+      # O jq filtra o JSON da resposta para extrair apenas o token
+      - name: Get OAuth Token
+        id: token_step
+        run: |
+          RESPONSE=$(curl -s -X POST "${{ secrets.CPI_TOKEN_URL }}?grant_type=client_credentials" \
+          -u "${{ secrets.CPI_CLIENT_ID }}:${{ secrets.CPI_CLIENT_SECRET }}")
+          TOKEN=$(echo $RESPONSE | jq -r '.access_token')
+          echo "ACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
+
+      # PASSO 3: Download do Artefato (API do Integration Suite)
+      # Aqui usamos a API OData do CPI para baixar o pacote em formato ZIP
+      - name: Download CPI Package
+        run: |
+          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('GitHub_API')/\$value" \
+          -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
+          --output "backups/package_$(date +'%Y%m%d').zip" --create-dirs
+
+      # PASSO 4: Versionamento no Git
+      # O GitHub Actions salva o arquivo .zip de volta no seu repositório
+      - name: Commit and Push
+        run: |
+          git config --global user.name "GitHub Action Bot"
+          git config --global user.email "actions@github.com"
+          git add backups/
+          git commit -m "Automated Backup CPI - $(date +'%d/%m/%Y')" || echo "Sem alterações"
+          git push
