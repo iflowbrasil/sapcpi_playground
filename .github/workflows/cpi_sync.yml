@@ -30,8 +30,9 @@ jobs:
       # Aqui usamos a API OData do CPI para baixar o pacote em formato ZIP
       - name: Download Integration Package
         run: |
-          # O /$value é obrigatório para baixar o conteúdo binário (ZIP)
-          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('${{ env.PACKAGE_ID }}')/\$value" \
+          # 1. Defina o ID manualmente aqui para testar (Substitua MEU_ID)
+          # 2. Use aspas simples em volta da URL para proteger o $
+          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('SEU_ID_AQUI')/\$value" \
           -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
           --output "backups/package_$(date +'%Y%m%d').zip" --create-dirs
 
