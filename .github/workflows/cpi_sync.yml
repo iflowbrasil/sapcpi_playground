@@ -1,47 +1,34 @@
-# 1. Nome que aparecerá na aba "Actions" do GitHub
-name: SAP CPI Backup Workflow
-
-# 2. Gatilhos (Triggers)
-on:
-  workflow_dispatch: # Permite execução manual
-  schedule:
-    - cron: '0 0 * * 1' # Executa automaticamente toda segunda-feira à meia-noite
-
 jobs:
-  backup_job:
-    runs-on: ubuntu-latest # Máquina virtual Linux temporária
-    
+  backup_cpi:
+    runs-on: ubuntu-latest
     steps:
-      # PASSO 1: Baixa o código do repositório para a VM
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      # PASSO 2: Autenticação Oauth2 no BTP
-      # O jq filtra o JSON da resposta para extrair apenas o token
       - name: Get OAuth Token
+        # Usamos GITHUB_OUTPUT para garantir que o token saia deste passo
         id: token_step
         run: |
           RESPONSE=$(curl -s -X POST "${{ secrets.CPI_TOKEN_URL }}?grant_type=client_credentials" \
           -u "${{ secrets.CPI_CLIENT_ID }}:${{ secrets.CPI_CLIENT_SECRET }}")
           TOKEN=$(echo $RESPONSE | jq -r '.access_token')
-          echo "ACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
+          echo "atoken=$TOKEN" >> $GITHUB_OUTPUT
 
-      # PASSO 3: Download do Artefato (API do Integration Suite)
-      # Aqui usamos a API OData do CPI para baixar o pacote em formato ZIP
       - name: Download Integration Package
         run: |
-          # 1. Defina o ID manualmente aqui para testar (Substitua MEU_ID)
-          # 2. Use aspas simples em volta da URL para proteger o $
-          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('SEU_ID_AQUI')/\$value" \
-          -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
-          --output "backups/package_$(date +'%Y%m%d').zip" --create-dirs
+          # Criar pasta antes
+          mkdir -p backups
+          
+          # Usamos o token vindo do passo anterior via steps.token_step.outputs.atoken
+          # IMPORTANTE: Substitua 'SEU_ID_REAL' pelo ID do seu pacote (ex: My_Package_ID)
+          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('SEU_ID_REAL')/\$value" \
+          -H "Authorization: Bearer ${{ steps.token_step.outputs.atoken }}" \
+          --output "backups/package_$(date +'%Y%m%d').zip"
 
-      # PASSO 4: Versionamento no Git
-      # O GitHub Actions salva o arquivo .zip de volta no seu repositório
       - name: Commit and Push
         run: |
-          git config --global user.name "GitHub Action Bot"
-          git config --global user.email "actions@github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add backups/
-          git commit -m "Automated Backup CPI - $(date +'%d/%m/%Y')" || echo "Sem alterações"
+          git commit -m "Backup CPI: $(date +'%d-%m-%Y')" || echo "Sem mudanças"
           git push
