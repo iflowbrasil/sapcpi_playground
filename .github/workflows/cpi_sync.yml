@@ -28,9 +28,10 @@ jobs:
 
       # PASSO 3: Download do Artefato (API do Integration Suite)
       # Aqui usamos a API OData do CPI para baixar o pacote em formato ZIP
-      - name: Download CPI Package
+      - name: Download Integration Package
         run: |
-          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('GitHub_API')/\$value" \
+          # O /$value é obrigatório para baixar o conteúdo binário (ZIP)
+          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('${{ env.PACKAGE_ID }}')/\$value" \
           -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
           --output "backups/package_$(date +'%Y%m%d').zip" --create-dirs
 
