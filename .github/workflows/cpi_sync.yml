@@ -1,34 +1,56 @@
+name: SAP CPI Backup Automático
+
+on:
+  workflow_dispatch: # Permite execução manual
+  schedule:
+    - cron: '0 0 * * 1' # Executa toda segunda-feira à meia-noite
+
 jobs:
-  backup_cpi:
+  backup_job:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout Code
+      # 1. Checkout do repositório
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # 2. Obter Token OAuth do SAP BTP
       - name: Get OAuth Token
-        # Usamos GITHUB_OUTPUT para garantir que o token saia deste passo
         id: token_step
         run: |
+          # Realiza a chamada e extrai o access_token usando jq
           RESPONSE=$(curl -s -X POST "${{ secrets.CPI_TOKEN_URL }}?grant_type=client_credentials" \
           -u "${{ secrets.CPI_CLIENT_ID }}:${{ secrets.CPI_CLIENT_SECRET }}")
+          
           TOKEN=$(echo $RESPONSE | jq -r '.access_token')
+          
+          # Validação básica para evitar 'null'
+          if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
+            echo "ERRO: Não foi possível obter o Access Token. Verifique os Secrets."
+            exit 1
+          fi
+          
+          # Salva o token para uso nos próximos passos
           echo "atoken=$TOKEN" >> $GITHUB_OUTPUT
 
-      - name: Download Integration Package
+      # 3. Download do Pacote Integration Suite (ZIP Binário)
+      - name: Download CPI Package
         run: |
-          # Criar pasta antes
           mkdir -p backups
           
-          # Usamos o token vindo do passo anterior via steps.token_step.outputs.atoken
-          # IMPORTANTE: Substitua 'SEU_ID_REAL' pelo ID do seu pacote (ex: My_Package_ID)
-          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('SEU_ID_REAL')/\$value" \
+          # IMPORTANTE: Substitua 'SEU_ID_DO_PACOTE' pelo ID técnico do seu pacote no CPI
+          # O sufixo /\$value garante o download do arquivo .zip real
+          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('SEU_ID_DO_PACOTE')/\$value" \
           -H "Authorization: Bearer ${{ steps.token_step.outputs.atoken }}" \
           --output "backups/package_$(date +'%Y%m%d').zip"
 
-      - name: Commit and Push
+      # 4. Commit e Push das alterações de volta para o GitHub
+      - name: Commit and Push Changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add backups/
-          git commit -m "Backup CPI: $(date +'%d-%m-%Y')" || echo "Sem mudanças"
+          
+          # Só faz o commit se houver arquivos novos ou alterados
+          git commit -m "Backup SAP CPI: $(date +'%d/%m/%Y')" || echo "Sem alterações para salvar."
           git push
