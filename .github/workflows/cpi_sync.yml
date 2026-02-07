@@ -1,62 +1,60 @@
-name: SAP CPI Backup Automático
+name: SAP CPI Backup Workflow Final
 
 on:
-  workflow_dispatch: # Permite execução manual na aba Actions
+  workflow_dispatch: # Execução manual (Aba Actions)
   schedule:
-    - cron: '0 0 * * 1' # Executa toda segunda-feira à meia-noite
+    - cron: '0 0 * * 1' # Automático: Toda segunda-feira à meia-noite
 
 jobs:
   backup_job:
     runs-on: ubuntu-latest
     
     steps:
-      # 1. Checkout do repositório para a máquina virtual
+      # 1. Preparar ambiente na máquina virtual
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Obter Token OAuth do SAP BTP
+      # 2. Obter Token e injetar no Ambiente (GITHUB_ENV)
       - name: Get OAuth Token
         id: token_step
         run: |
-          # Realiza a chamada POST para o endpoint de Token do BTP
+          # Chamada POST para o BTP
           RESPONSE=$(curl -s -X POST "${{ secrets.CPI_TOKEN_URL }}?grant_type=client_credentials" \
           -u "${{ secrets.CPI_CLIENT_ID }}:${{ secrets.CPI_CLIENT_SECRET }}")
           
-          # Extrai o token usando jq
+          # Extrai o token
           TOKEN=$(echo $RESPONSE | jq -r '.access_token')
           
-          # Validação crítica: Se o token for nulo ou vazio, encerra com erro amigável
+          # VALIDAÇÃO: Se o token falhar, para o processo aqui com erro claro
           if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
-            echo "ERRO: Token não gerado. Resposta da SAP: $RESPONSE"
+            echo "❌ ERRO: Falha na autenticação BTP. Resposta: $RESPONSE"
             exit 1
           fi
           
-          # Exporta o token para os próximos passos (padrão GITHUB_OUTPUT)
-          echo "atoken=$TOKEN" >> $GITHUB_OUTPUT
+          # Injeta o token globalmente no Job para ser usado como ${{ env.ACCESS_TOKEN }}
+          echo "ACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
 
-      # 3. Download do Pacote do Integration Suite (Arquivo ZIP)
+      # 3. Download do Artefato ZIP (OData Binary)
       - name: Download CPI Package
         run: |
-          mkdir -p backups
-          
-          # ATENÇÃO: Substitua 'SEU_ID_TECNICO' pelo ID do seu pacote no CPI
-          # O uso de \$value é obrigatório para baixar o conteúdo binário
-          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('SEU_ID_TECNICO')/\$value" \
-          -H "Authorization: Bearer ${{ steps.token_step.outputs.atoken }}" \
-          --output "backups/package_$(date +'%Y%m%d').zip"
+          # IMPORTANTE: Mude 'GitHub_API' para o ID Técnico do SEU pacote
+          # O sufixo \$value extrai o binário ZIP real
+          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('GitHub_API')/\$value" \
+          -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
+          --output "backups/package_$(date +'%Y%m%d').zip" --create-dirs
 
-      # 4. Commit e Push das alterações para o GitHub
-      - name: Commit and Push Changes
+      # 4. Versionamento Automático no Git
+      - name: Commit and Push
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GitHub Action Bot"
+          git config --global user.email "actions@github.com"
           
           git add backups/
           
-          # Só realiza o commit se houver um arquivo novo ou alterado
+          # Verifica se o arquivo ZIP realmente mudou antes de fazer o commit
           if git diff --cached --quiet; then
-            echo "Sem alterações detectadas no pacote CPI."
+            echo "✅ Sem alterações no pacote CPI desde o último backup."
           else
-            git commit -m "Backup SAP CPI: $(date +'%d/%m/%Y')"
+            git commit -m "📦 Automated Backup CPI - $(date +'%d/%m/%Y')"
             git push
           fi
