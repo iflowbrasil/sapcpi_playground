@@ -22,6 +22,19 @@ jobs:
           TOKEN_URL: ${{ secrets.CPI_TOKEN_URL }}
         run: |
           set -e
+
+              echo "==== DEBUG CREDENCIAIS ===="
+
+              echo "CLIENT_ID length: ${#CLIENT_ID}"
+              echo "CLIENT_SECRET length: ${#CLIENT_SECRET}"
+          
+              printf "CLIENT_ID HEX: "
+              echo -n "$CLIENT_ID" | xxd
+          
+              printf "CLIENT_SECRET HEX: "
+              echo -n "$CLIENT_SECRET" | xxd
+          
+              echo "==== FIM DEBUG ===="
       
           echo "Gerando token OAuth..."
       
