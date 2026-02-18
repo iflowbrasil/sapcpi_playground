@@ -15,42 +15,73 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Gerar OAuth Token
+      # 2. Gerar OAuth Token (versão robusta)
       - name: Get OAuth Token
-        id: token_step
+        shell: bash
         run: |
+          set +H
+          set -e
+
           echo "Gerando token OAuth..."
 
-          # Desabilita history expansion (evita erro com ! no client_id)
-          set +H
+          CLIENT_ID='${{ secrets.CPI_CLIENT_ID }}'
+          CLIENT_SECRET='${{ secrets.CPI_CLIENT_SECRET }}'
+          TOKEN_URL='${{ secrets.CPI_TOKEN_URL }}'
 
-          # Gera Basic Auth em Base64
-          BASIC_AUTH=$(echo -n "${{ secrets.CPI_CLIENT_ID }}:${{ secrets.CPI_CLIENT_SECRET }}" | base64)
+          BASIC_AUTH=$(printf "%s:%s" "$CLIENT_ID" "$CLIENT_SECRET" | base64 | tr -d '\n')
 
-          RESPONSE=$(curl -s -X POST "${{ secrets.CPI_TOKEN_URL }}" \
+          RESPONSE=$(curl -s -X POST "$TOKEN_URL" \
             -H "Authorization: Basic $BASIC_AUTH" \
             -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "grant_type=client_credentials")
+            --data "grant_type=client_credentials")
 
           TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
 
           if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "ERRO: Falha na autenticação BTP."
+            echo "Falha na autenticação BTP."
             echo "Resposta completa:"
             echo "$RESPONSE"
             exit 1
           fi
 
-          echo "Token obtido com sucesso"
           echo "ACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
+          echo "Token gerado com sucesso."
 
       # 3. Download do Package ZIP
       - name: Download CPI Package
+        shell: bash
         run: |
+          set -e
+
           echo "Iniciando download do pacote CPI..."
 
           PACKAGE_ID="GitHub_API"  # Alterar para o ID técnico do seu pacote
-
           mkdir -p backups
 
-          curl -L -X GET "$
+          curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('${PACKAGE_ID}')/\$value" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            --fail \
+            --output "backups/package_$(date +'%Y%m%d').zip"
+
+          echo "Download concluído."
+
+      # 4. Commit automático somente se houver mudança
+      - name: Commit and Push
+        shell: bash
+        run: |
+          set -e
+
+          echo "Verificando alterações..."
+
+          git config --global user.name "GitHub Action Bot"
+          git config --global user.email "actions@github.com"
+
+          git add backups/
+
+          if git diff --cached --quiet; then
+            echo "Sem alterações no pacote CPI desde o último backup."
+          else
+            git commit -m "Automated Backup CPI - $(date +'%d/%m/%Y')"
+            git push
+            echo "Backup versionado com sucesso."
+          fi
