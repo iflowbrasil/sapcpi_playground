@@ -3,7 +3,7 @@ name: SAP CPI Backup Workflow Final
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 1' # Toda segunda-feira à meia-noite
+    - cron: '0 0 * * 1'
 
 jobs:
   backup_job:
@@ -11,49 +11,46 @@ jobs:
 
     steps:
 
-      # 1. Checkout do repositório
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Gerar OAuth Token (compatível com client_id contendo !)
       - name: Get OAuth Token
         shell: bash
         run: |
           set -e
           set +H
 
-          echo "Gerando token OAuth..."
+          echo 'Gerando token OAuth...'
 
-          CLIENT_ID='${{secrets.CPI_CLIENT_ID}}'
-          CLIENT_SECRET='${{secrets.CPI_CLIENT_SECRET}}'
-          TOKEN_URL='${{secrets.CPI_TOKEN_URL}}'
+          CLIENT_ID='${{ secrets.CPI_CLIENT_ID }}'
+          CLIENT_SECRET='${{ secrets.CPI_CLIENT_SECRET }}'
+          TOKEN_URL='${{ secrets.CPI_TOKEN_URL }}'
 
           RESPONSE=$(curl -s -X POST "$TOKEN_URL" \
             -H 'Content-Type: application/x-www-form-urlencoded' \
             -d 'grant_type=client_credentials' \
-            -u '$CLIENT_ID:$CLIENT_SECRET')
+            -u "$CLIENT_ID:$CLIENT_SECRET")
 
           TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
 
           if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "Falha na autenticação BTP."
-            echo "Resposta completa:"
+            echo 'Falha na autenticação BTP.'
+            echo 'Resposta completa:'
             echo "$RESPONSE"
             exit 1
           fi
 
           echo "ACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
-          echo "Token gerado com sucesso."
+          echo 'Token gerado com sucesso.'
 
-      # 3. Download do Package ZIP
       - name: Download CPI Package
         shell: bash
         run: |
           set -e
 
-          echo "Iniciando download do pacote CPI..."
+          echo 'Iniciando download do pacote CPI...'
 
-          PACKAGE_ID="GitHub_API"  # Alterar para o ID técnico correto
+          PACKAGE_ID='GitHub_API'
           mkdir -p backups
 
           curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('${PACKAGE_ID}')/\$value" \
@@ -61,25 +58,24 @@ jobs:
             --fail \
             --output "backups/package_$(date +'%Y%m%d').zip"
 
-          echo "Download concluído."
+          echo 'Download concluído.'
 
-      # 4. Commit automático somente se houver mudança
       - name: Commit and Push
         shell: bash
         run: |
           set -e
 
-          echo "Verificando alterações..."
+          echo 'Verificando alterações...'
 
-          git config --global user.name "GitHub Action Bot"
-          git config --global user.email "actions@github.com"
+          git config --global user.name 'GitHub Action Bot'
+          git config --global user.email 'actions@github.com'
 
           git add backups/
 
           if git diff --cached --quiet; then
-            echo "Sem alterações no pacote CPI desde o último backup."
+            echo 'Sem alterações no pacote CPI desde o último backup.'
           else
             git commit -m "Automated Backup CPI - $(date +'%d/%m/%Y')"
             git push
-            echo "Backup versionado com sucesso."
+            echo 'Backup versionado com sucesso.'
           fi
