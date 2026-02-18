@@ -16,32 +16,34 @@ jobs:
 
       - name: Get OAuth Token
         shell: bash
+        env:
+          CLIENT_ID: ${{ secrets.CPI_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CPI_CLIENT_SECRET }}
+          TOKEN_URL: ${{ secrets.CPI_TOKEN_URL }}
         run: |
           set -e
-          set +H
-
-          echo 'Gerando token OAuth...'
-
-          CLIENT_ID='${{ secrets.CPI_CLIENT_ID }}'
-          CLIENT_SECRET='${{ secrets.CPI_CLIENT_SECRET }}'
-          TOKEN_URL='${{ secrets.CPI_TOKEN_URL }}'
-
+      
+          echo "Gerando token OAuth..."
+      
+          BASIC_AUTH=$(printf "%s:%s" "$CLIENT_ID" "$CLIENT_SECRET" | base64)
+      
           RESPONSE=$(curl -s -X POST "$TOKEN_URL" \
-            -H 'Content-Type: application/x-www-form-urlencoded' \
-            -d 'grant_type=client_credentials' \
-            -u "$CLIENT_ID:$CLIENT_SECRET")
-
+            -H "Authorization: Basic $BASIC_AUTH" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data "grant_type=client_credentials")
+      
+          echo "Resposta recebida."
+      
           TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
-
+      
           if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo 'Falha na autenticação BTP.'
-            echo 'Resposta completa:'
+            echo "Falha na autenticação BTP."
             echo "$RESPONSE"
             exit 1
           fi
-
+      
           echo "ACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
-          echo 'Token gerado com sucesso.'
+          echo "Token gerado com sucesso."
 
       - name: Download CPI Package
         shell: bash
