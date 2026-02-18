@@ -22,6 +22,9 @@ jobs:
           TOKEN_URL: ${{ secrets.CPI_TOKEN_URL }}
         run: |
           set -e
+
+          echo "TOKEN_URL='$TOKEN_URL'"
+
           
           echo "Gerando token OAuth..."
       
