@@ -15,12 +15,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Gerar OAuth Token (versão robusta)
+      # 2. Gerar OAuth Token (compatível com client_id contendo !)
       - name: Get OAuth Token
         shell: bash
         run: |
-          set +H
           set -e
+          set +H
 
           echo "Gerando token OAuth..."
 
@@ -28,12 +28,10 @@ jobs:
           CLIENT_SECRET='${{ secrets.CPI_CLIENT_SECRET }}'
           TOKEN_URL='${{ secrets.CPI_TOKEN_URL }}'
 
-          BASIC_AUTH=$(printf "%s:%s" "$CLIENT_ID" "$CLIENT_SECRET" | base64 | tr -d '\n')
-
           RESPONSE=$(curl -s -X POST "$TOKEN_URL" \
-            -H "Authorization: Basic $BASIC_AUTH" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            --data "grant_type=client_credentials")
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            -d 'grant_type=client_credentials' \
+            -u "$CLIENT_ID:$CLIENT_SECRET")
 
           TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
 
@@ -55,7 +53,7 @@ jobs:
 
           echo "Iniciando download do pacote CPI..."
 
-          PACKAGE_ID="GitHub_API"  # Alterar para o ID técnico do seu pacote
+          PACKAGE_ID="GitHub_API"  # Alterar para o ID técnico correto
           mkdir -p backups
 
           curl -L -X GET "${{ secrets.CPI_INTEGRATION_URL }}/api/v1/IntegrationPackages('${PACKAGE_ID}')/\$value" \
